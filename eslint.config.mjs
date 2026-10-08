@@ -8,6 +8,12 @@ export default [
   },
   eslint.configs.recommended,
   {
+    files: ['apps/**/*.js', 'apps/**/*.mjs'],
+    rules: {
+      'no-undef': 'off',
+    },
+  },
+  {
     files: ['apps/**/*.ts', 'apps/**/*.tsx'],
     languageOptions: {
       parser: tsParser,
