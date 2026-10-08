@@ -2,6 +2,7 @@ import { ModelProvider, TokenUsage } from './interface.js';
 import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 export class MockProvider implements ModelProvider {
   async generateText(opts: {
@@ -13,7 +14,7 @@ export class MockProvider implements ModelProvider {
   }): Promise<{ text: string; parsed?: unknown; usage: TokenUsage }> {
     // If it's the challenge writer prompt
     if (opts.systemPrompt.includes('Touch Grass challenge writer')) {
-      const filePath = path.join(process.cwd(), '../../fixtures/responses/challenge-writer.json');
+      const filePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../fixtures/responses/challenge-writer.json');
       let data: any;
       try {
         const fileContent = fs.readFileSync(filePath, 'utf-8');
@@ -31,7 +32,7 @@ export class MockProvider implements ModelProvider {
           proofRubric: "Any photo of outside.",
           safetyNotes: "Stay safe.",
           locationHint: null,
-          tags: ["mock"]
+          tags: ["mock", "outdoors"]
         };
       }
       

@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { Challenge } from '../db/interface.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ChallengeSchema = z.object({
   title: z.string().min(5).max(100),
@@ -29,7 +30,7 @@ const ChallengeSchema = z.object({
 type DraftChallenge = z.infer<typeof ChallengeSchema>;
 
 function loadBackupChallenge(): DraftChallenge {
-  const fixturePath = path.join(process.cwd(), '../../fixtures/responses/challenge-writer.json');
+  const fixturePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../fixtures/responses/challenge-writer.json');
   try {
     return ChallengeSchema.parse(JSON.parse(fs.readFileSync(fixturePath, 'utf8')));
   } catch {
