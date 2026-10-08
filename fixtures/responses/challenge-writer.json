@@ -1,0 +1,13 @@
+{
+  "title": "Texture Hunt in the Park",
+  "description": "Find a tree with peeling or rough bark, touch it, and photograph the texture up close. Take a moment to feel the difference between the rough bark and a smooth leaf nearby.",
+  "category": "nature",
+  "difficulty": 2,
+  "socialLevel": 0,
+  "estimatedMinutes": 10,
+  "proofType": "photo",
+  "proofRubric": "The photo must be a close-up showing the texture of tree bark.",
+  "safetyNotes": "Watch your step around uneven ground and roots.",
+  "locationHint": "Any nearby park or street with mature trees.",
+  "tags": ["nature", "sensory", "texture", "trees"]
+}

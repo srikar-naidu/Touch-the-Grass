@@ -1,11 +1,14 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import * as Sentry from '@sentry/node';
 import { config } from 'dotenv';
 
 config(); // Load .env
 
 const app = new Hono();
+
+app.use('*', cors());
 
 // Initialize Sentry if DSN is provided
 if (process.env.SENTRY_DSN) {
@@ -21,12 +24,20 @@ app.get('/health', (c) => {
   return c.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+import { runDailyChallenge } from './workflows/daily-challenge';
+
 // Mock development routes (disabled in production)
 const isDev = process.env.NODE_ENV !== 'production';
 if (isDev) {
   app.post('/dev/run-daily', async (c) => {
-    // TODO: Trigger Mastra daily workflow
-    return c.json({ status: 'mock_success', message: 'Challenge generated in mock mode' });
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const userId = body.userId || 'test-user';
+      const result = await runDailyChallenge(userId);
+      return c.json({ status: 'mock_success', ...result });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
   });
 
   app.post('/dev/verify', async (c) => {
