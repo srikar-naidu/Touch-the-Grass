@@ -48,12 +48,21 @@ jobs:
       - run: npm ci --prefix apps/web
       - run: npm run build
 
-      # Start the server in background
-      - run: npm run start &
-      - run: sleep 5
+      # Start the server in background and retain logs for diagnostics.
+      - run: nohup npm run start > /tmp/touch-grass-api.log 2>&1 &
 
-      # Health check
-      - run: curl -f http://localhost:3000/health
+      # Health check: allow the server up to 30 seconds to start.
+      - name: Wait for API health
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/touch-grass-api.log
+          exit 1
 
       # Mock workflow smoke test
       - run: |
