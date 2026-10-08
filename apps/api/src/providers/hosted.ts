@@ -9,22 +9,23 @@ export class HostedProvider implements ModelProvider {
   private baseUrl = process.env.GEMMA_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
   private apiKey = process.env.GEMMA_API_KEY || '';
   private textModel = process.env.GEMMA_TEXT_MODEL || 'gemma-2-9b-it';
-  private visionModel = process.env.GEMMA_VISION_MODEL || 'gemma-3-12b-it'; // TODO(verify) exact vision model name
+  private visionModel = process.env.GEMMA_VISION_MODEL || 'gemma-3-12b-it';
 
-  private async fetchGoogleAPI(model: string, contents: any[], schema?: z.ZodSchema, maxRetries = 3) {
-    let systemInstruction = undefined;
-    if (contents.length > 1 && contents[0].role === 'user' && contents[0].parts[0].text.startsWith('SYSTEM:')) {
-      // Extract system instruction for the API
+  private async fetchGoogleAPI(model: string, contents: any[], schema?: z.ZodSchema, options: { maxTokens?: number; temperature?: number } = {}, maxRetries = 3) {
+    let systemInstruction: any = undefined;
+    const requestContents = contents.map(content => ({ ...content, parts: [...content.parts] }));
+    if (requestContents.length > 1 && requestContents[0].role === 'user' && requestContents[0].parts[0].text.startsWith('SYSTEM:')) {
       systemInstruction = {
-        parts: [{ text: contents[0].parts[0].text.replace('SYSTEM:', '').trim() }]
+        parts: [{ text: requestContents[0].parts[0].text.replace(/^SYSTEM:\s*/, '').trim() }]
       };
-      contents.shift();
+      requestContents.shift();
     }
 
     const payload: any = {
-      contents,
+      contents: requestContents,
       generationConfig: {
-        temperature: 0.7,
+        temperature: options.temperature ?? 0.7,
+        maxOutputTokens: options.maxTokens ?? 300,
       }
     };
 
@@ -34,16 +35,23 @@ export class HostedProvider implements ModelProvider {
 
     if (schema) {
       payload.generationConfig.responseMimeType = 'application/json';
-      payload.generationConfig.responseSchema = zodToJsonSchema(schema) as any;
+      const jsonSchema = zodToJsonSchema(schema) as Record<string, unknown>;
+      // Google's responseSchema accepts the JSON Schema vocabulary but not the
+      // draft metadata emitted by zod-to-json-schema.
+      const { $schema: _draft, ...responseSchema } = jsonSchema;
+      payload.generationConfig.responseSchema = responseSchema;
     }
 
     let attempt = 0;
     while (attempt < maxRetries) {
       attempt++;
       try {
-        const response = await fetch(`${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`, {
+        const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/models/${model}:generateContent`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.apiKey ? { 'x-goog-api-key': this.apiKey } : {})
+          },
           body: JSON.stringify(payload)
         });
 
@@ -57,7 +65,13 @@ export class HostedProvider implements ModelProvider {
         }
 
         const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const finishReason = data.candidates?.[0]?.finishReason;
+        const text = (data.candidates?.[0]?.content?.parts || [])
+          .map((part: any) => part.text)
+          .filter((part: unknown): part is string => typeof part === 'string')
+          .join('')
+          .trim();
+        if (!text) throw new Error(`Model returned no text${finishReason ? ` (finish reason: ${finishReason})` : ''}`);
         
         const usage: TokenUsage = {
           promptTokens: data.usageMetadata?.promptTokenCount || 0,
@@ -68,7 +82,7 @@ export class HostedProvider implements ModelProvider {
         if (!schema) return { text, usage };
 
         try {
-          const parsedJSON = JSON.parse(text);
+          const parsedJSON = JSON.parse(text.replace(/^```json\s*|\s*```$/g, ''));
           const parsed = schema.parse(parsedJSON);
           return { text, parsed, usage };
         } catch (validationError: any) {
@@ -77,7 +91,10 @@ export class HostedProvider implements ModelProvider {
             return { text, parsed: undefined, usage }; // Return raw text + flag undefined
           }
           // Append error to user prompt to auto-correct
-          payload.contents[payload.contents.length - 1].parts[0].text += `\n\nERROR parsing previous JSON output: ${validationError.message}. Please fix it.`;
+          const lastTextPart = payload.contents[payload.contents.length - 1].parts.find((part: any) => typeof part.text === 'string');
+          if (lastTextPart) {
+            lastTextPart.text += `\n\nERROR parsing previous JSON output: ${validationError.message}. Return only corrected JSON.`;
+          }
         }
       } catch (err: any) {
         if (attempt >= maxRetries) throw err;
@@ -95,14 +112,16 @@ export class HostedProvider implements ModelProvider {
     temperature?: number;
   }): Promise<{ text: string; parsed?: unknown; usage: TokenUsage }> {
     return await Sentry.startSpan({ name: 'generateText', op: 'ai.generation' }, async () => {
-      return this.fetchGoogleAPI(
+      const result = await this.fetchGoogleAPI(
         this.textModel,
         [
           { role: 'user', parts: [{ text: `SYSTEM: ${opts.systemPrompt}` }] },
           { role: 'user', parts: [{ text: opts.userPrompt }] }
         ],
-        opts.schema
+        opts.schema,
+        { maxTokens: opts.maxTokens, temperature: opts.temperature }
       );
+      return result;
     });
   }
 
@@ -115,8 +134,9 @@ export class HostedProvider implements ModelProvider {
   }): Promise<{ text: string; parsed?: unknown; usage: TokenUsage }> {
     return await Sentry.startSpan({ name: 'analyzeImage', op: 'ai.vision' }, async () => {
       // Determine mime type from base64 if possible, default to jpeg
-      const mimeType = opts.imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-      const cleanBase64 = opts.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const dataUrlMatch = opts.imageBase64.match(/^data:(image\/[\w.+-]+);base64,/i);
+      const mimeType = dataUrlMatch?.[1]?.toLowerCase() || 'image/jpeg';
+      const cleanBase64 = opts.imageBase64.replace(/^data:image\/[\w.+-]+;base64,/i, '');
 
       return this.fetchGoogleAPI(
         this.visionModel,
@@ -128,7 +148,8 @@ export class HostedProvider implements ModelProvider {
             ] 
           }
         ],
-        opts.schema
+        opts.schema,
+        { maxTokens: opts.maxTokens }
       );
     });
   }
