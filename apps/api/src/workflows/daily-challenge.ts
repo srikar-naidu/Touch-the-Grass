@@ -5,6 +5,9 @@ import { sampleSeedTuples } from '../taxonomy/sampler';
 import { validateChallengeSafety } from '../safety/validator';
 import { ulid } from 'ulid';
 import { z } from 'zod';
+import { Challenge } from '../db/interface';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const ChallengeSchema = z.object({
   title: z.string().min(5).max(100),
@@ -22,6 +25,29 @@ const ChallengeSchema = z.object({
   locationHint: z.string().nullable(),
   tags: z.array(z.string()).min(2).max(6),
 });
+
+type DraftChallenge = z.infer<typeof ChallengeSchema>;
+
+function loadBackupChallenge(): DraftChallenge {
+  const fixturePath = path.join(process.cwd(), '../../fixtures/responses/challenge-writer.json');
+  try {
+    return ChallengeSchema.parse(JSON.parse(fs.readFileSync(fixturePath, 'utf8')));
+  } catch {
+    return {
+      title: 'Notice Three Signs of the Season',
+      description: 'Walk outside for ten minutes and notice three small signs of the current season. Write them down or photograph one texture that catches your attention.',
+      category: 'nature',
+      difficulty: 1,
+      socialLevel: 0,
+      estimatedMinutes: 10,
+      proofType: 'photo',
+      proofRubric: 'The photo should show an outdoor natural detail or texture noticed during the walk.',
+      safetyNotes: 'Stay on a safe, familiar route and watch for uneven ground.',
+      locationHint: null,
+      tags: ['nature', 'observation', 'walk']
+    };
+  }
+}
 
 export async function runDailyChallenge(userId: string) {
   const userRepo = new MockUserRepository();
@@ -61,24 +87,37 @@ Respond ONLY with valid JSON matching the provided schema.`;
 
   const userContext = `Seed: ${JSON.stringify(selectedSeed)}\nUser Location: ${profile.city}`;
 
-  const genResponse = await provider.generateText({
-    systemPrompt: prompt,
-    userPrompt: userContext,
-    schema: ChallengeSchema
-  });
-  
-  if (!genResponse.parsed) {
-    throw new Error('Failed to generate a valid challenge schema');
+  let draftChallenge: DraftChallenge;
+  let sourceModel = providerMode === 'hosted'
+    ? (process.env.GEMMA_TEXT_MODEL || 'gemma-text')
+    : 'mock';
+
+  try {
+    const genResponse = await provider.generateText({
+      systemPrompt: prompt,
+      userPrompt: userContext,
+      schema: ChallengeSchema,
+      maxTokens: 500,
+      temperature: 0.8
+    });
+
+    if (!genResponse.parsed) throw new Error('Model returned an invalid challenge schema');
+    draftChallenge = ChallengeSchema.parse(genResponse.parsed);
+  } catch (error) {
+    // Step 5's final safety net: always return a usable, schema-valid challenge
+    // when the model endpoint is unavailable or exhausts its validation retries.
+    console.warn('Challenge generation failed; using backup challenge', error);
+    draftChallenge = loadBackupChallenge();
+    sourceModel = 'backup-pool';
   }
-  const draftChallenge = genResponse.parsed as any;
   
-  const challenge = {
+  const challenge: Challenge = {
     ...draftChallenge,
     id: ulid(),
     userId,
     seed: selectedSeed,
-    sourceModel: "mock",
-    status: "issued",
+    sourceModel,
+    status: 'issued',
     createdAt: new Date(),
     issuedAt: new Date(),
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -104,7 +143,7 @@ Respond ONLY with valid JSON matching the provided schema.`;
     metadata: {
       seedSelected: selectedSeed,
       safetyChecks: 1,
-      sourceModel: "mock"
+      sourceModel
     }
   };
 }
