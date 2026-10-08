@@ -1,0 +1,78 @@
+services:
+  # API + PWA web service
+  - type: web
+    name: touch-grass-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PROVIDER_MODE
+        sync: false    # set manually
+      - key: STORE_MODE
+        sync: false
+      - key: GEMMA_BASE_URL
+        sync: false
+      - key: GEMMA_API_KEY
+        sync: false
+      - key: GEMMA_VISION_MODEL
+        sync: false
+      - key: GEMMA_TEXT_MODEL
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: TIGER_DATABASE_URL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: SERPAPI_API_KEY
+        sync: false
+      - key: TINKER_API_KEY
+        sync: false
+      - key: TINKER_BASE_MODEL
+        sync: false
+      - key: USE_TUNED_WRITER
+        value: "false"
+      - key: TABPFN_SERVICE_URL
+        fromService:
+          name: touch-grass-tabpfn
+          type: web
+          property: hostport
+      - key: DEFAULT_CITY
+        value: "Hyderabad, India"
+      - key: APP_BASE_URL
+        sync: false
+
+  # TabPFN Python service
+  - type: web
+    name: touch-grass-tabpfn
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    rootDir: services/tabpfn
+    envVars:
+      - key: TABPFN_TOKEN
+        sync: false
+
+  # Cron job for daily challenge generation
+  - type: cron
+    name: touch-grass-daily-cron
+    runtime: node
+    schedule: "0 * * * *"    # Every hour
+    buildCommand: npm ci && npm run build
+    startCommand: npm run cron:daily
+    envVars:
+      - key: API_INTERNAL_URL
+        fromService:
+          name: touch-grass-api
+          type: web
+          property: hostport

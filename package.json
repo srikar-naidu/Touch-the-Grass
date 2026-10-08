@@ -1,0 +1,28 @@
+{
+  "name": "touch-grass",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Daily real-world challenge agent powered by open-source AI",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "cd apps/api && npm run dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "cd apps/api && npm run build",
+    "build:web": "cd apps/web && npm run build",
+    "start": "cd apps/api && npm run start",
+    "test": "vitest run",
+    "lint": "eslint apps/ --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
+    "cron:daily": "cd apps/api && npx tsx src/cron/daily.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
