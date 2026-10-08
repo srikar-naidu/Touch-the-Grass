@@ -1,5 +1,5 @@
-import { ModelProvider } from '../providers/interface';
-import { Challenge } from '../db/interface';
+import { ModelProvider } from '../providers/interface.js';
+import { Challenge } from '../db/interface.js';
 import { z } from 'zod';
 
 const VerificationSchema = z.object({

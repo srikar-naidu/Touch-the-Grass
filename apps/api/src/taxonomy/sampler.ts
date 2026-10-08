@@ -1,5 +1,5 @@
-import { Category, PlaceType, Constraint, ProofType, SeedTuple } from './types';
-import { UserProfile, Challenge } from '../db/interface';
+import { Category, PlaceType, Constraint, ProofType, SeedTuple } from './types.js';
+import { UserProfile, Challenge } from '../db/interface.js';
 
 const CATEGORIES: Category[] = ['nature', 'movement', 'sport', 'social-light', 'social-bold', 'creative', 'mindful', 'sensory', 'style', 'community', 'exploration'];
 const PLACE_TYPES: PlaceType[] = ['park', 'court', 'street', 'market', 'rooftop', 'trail', 'water-edge', 'neighborhood', 'campus', 'any'];

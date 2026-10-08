@@ -6,7 +6,7 @@ import {
   AppEvent,
   UserProfile,
   Aggregates
-} from './interface';
+} from './interface.js';
 
 export class MockChallengeRepository implements ChallengeRepository {
   private challenges: Challenge[] = [];

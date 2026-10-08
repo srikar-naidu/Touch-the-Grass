@@ -1,4 +1,4 @@
-import { ModelProvider, TokenUsage } from './interface';
+import { ModelProvider, TokenUsage } from './interface.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import * as Sentry from '@sentry/node';

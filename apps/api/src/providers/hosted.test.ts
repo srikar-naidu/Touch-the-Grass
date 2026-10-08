@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { HostedProvider } from './hosted';
+import { HostedProvider } from './hosted.js';
 
 const resultSchema = z.object({
   pass: z.boolean(),

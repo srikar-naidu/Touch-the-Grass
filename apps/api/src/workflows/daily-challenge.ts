@@ -1,11 +1,11 @@
-import { MockUserRepository, MockChallengeRepository, MockEventRepository } from '../db/mock';
-import { MockProvider } from '../providers/mock';
-import { HostedProvider } from '../providers/hosted';
-import { sampleSeedTuples } from '../taxonomy/sampler';
-import { validateChallengeSafety } from '../safety/validator';
+import { MockUserRepository, MockChallengeRepository, MockEventRepository } from '../db/mock.js';
+import { MockProvider } from '../providers/mock.js';
+import { HostedProvider } from '../providers/hosted.js';
+import { sampleSeedTuples } from '../taxonomy/sampler.js';
+import { validateChallengeSafety } from '../safety/validator.js';
 import { ulid } from 'ulid';
 import { z } from 'zod';
-import { Challenge } from '../db/interface';
+import { Challenge } from '../db/interface.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 

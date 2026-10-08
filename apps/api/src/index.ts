@@ -24,7 +24,7 @@ app.get('/health', (c) => {
   return c.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-import { runDailyChallenge } from './workflows/daily-challenge';
+import { runDailyChallenge } from './workflows/daily-challenge.js';
 
 // Mock development routes (disabled in production)
 const isDev = process.env.NODE_ENV !== 'production';

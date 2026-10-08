@@ -1,4 +1,4 @@
-import { Challenge } from '../db/interface';
+import { Challenge } from '../db/interface.js';
 
 export interface SafetyResult {
   safe: boolean;

@@ -1,4 +1,4 @@
-import { ModelProvider, TokenUsage } from './interface';
+import { ModelProvider, TokenUsage } from './interface.js';
 import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
