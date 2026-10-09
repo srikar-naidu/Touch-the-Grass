@@ -9,6 +9,7 @@ import { Challenge } from '../db/interface.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as Sentry from '@sentry/node';
 
 const ChallengeSchema = z.object({
   title: z.string().min(5).max(100),
@@ -94,7 +95,36 @@ function loadBackupChallenge(): DraftChallenge {
   }
 }
 
-export async function runDailyChallenge(userId: string) {
+async function generateAudio(text: string): Promise<{ audioUrl: string | null; useFallback: boolean }> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return { audioUrl: null, useFallback: true };
+
+  try {
+    const voiceId = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2',
+        output_format: 'mp3_22050_32',
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new Error(`ElevenLabs returned ${response.status}`);
+    const audio = Buffer.from(await response.arrayBuffer()).toString('base64');
+    return { audioUrl: `data:audio/mpeg;base64,${audio}`, useFallback: false };
+  } catch (error) {
+    console.warn('Audio generation failed; using browser speech fallback', error);
+    return { audioUrl: null, useFallback: true };
+  }
+}
+
+async function runDailyChallengeWorkflow(userId: string) {
   const userRepo = new MockUserRepository();
   const challengeRepo = new MockChallengeRepository();
   const eventRepo = new MockEventRepository();
@@ -224,8 +254,16 @@ Respond only with JSON matching the provided schema.`,
     eventType: 'issued'
   });
 
+  // Step 9: Generate Audio
+  const audio = await generateAudio(`${challenge.title}. ${challenge.description}`);
+  challenge.audioUrl = audio.audioUrl;
+  // Persist the optional audio URL without making audio availability a hard failure.
+  await challengeRepo.save(challenge);
+
   return {
     challenge,
+    audioUrl: audio.audioUrl,
+    useAudioFallback: audio.useFallback,
     metadata: {
       seedSelected: selectedSeed,
       safetyChecks: 2,
@@ -234,4 +272,24 @@ Respond only with JSON matching the provided schema.`,
       sourceModel
     }
   };
+}
+
+// Step 10: Sentry Wrap
+export async function runDailyChallenge(userId: string) {
+  return Sentry.startSpan({ name: 'daily-challenge-workflow', op: 'workflow' }, async span => {
+    span.setAttribute('workflow', 'daily-challenge');
+    span.setAttribute('userIdHash', userId.length);
+    try {
+      const result = await runDailyChallengeWorkflow(userId);
+      span.setAttribute('seedsConsidered', 5);
+      span.setAttribute('sourceModel', result.metadata.sourceModel);
+      span.setAttribute('dedupAttempts', result.metadata.dedupAttempts);
+      span.setAttribute('safetyChecks', result.metadata.safetyChecks);
+      span.setAttribute('audioFallback', result.useAudioFallback);
+      return result;
+    } catch (error) {
+      Sentry.captureException(error, { tags: { workflow: 'daily-challenge' } });
+      throw error;
+    }
+  });
 }
