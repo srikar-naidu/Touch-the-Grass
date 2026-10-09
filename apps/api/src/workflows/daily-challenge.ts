@@ -95,6 +95,12 @@ function loadBackupChallenge(): DraftChallenge {
   }
 }
 
+function scoreSeed(seed: { difficulty: number; socialLevel: number }, profile: { socialComfort: number }): number {
+  const difficultyScore = 1 - Math.abs(seed.difficulty - 2.5) / 4;
+  const socialScore = seed.socialLevel <= profile.socialComfort ? 1 : 0;
+  return Math.max(0, Math.min(1, difficultyScore * 0.7 + socialScore * 0.3));
+}
+
 async function generateAudio(text: string): Promise<{ audioUrl: string | null; useFallback: boolean }> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return { audioUrl: null, useFallback: true };
@@ -136,11 +142,25 @@ async function runDailyChallengeWorkflow(userId: string) {
   const profile = await userRepo.getProfile(userId);
   const recentChallenges = await challengeRepo.getRecent(userId, 30);
   
-  // Step 2 & 3: Sample Seeds
+  // Step 2: Gather Context. External weather/search grounding is optional;
+  // retain a deterministic local context when those services are unavailable.
+  const context = {
+    city: profile.city,
+    weather: process.env.DEFAULT_WEATHER || 'unknown',
+    timeOfDay: new Date().toLocaleTimeString('en-US', { hour: 'numeric', hour12: false }),
+  };
+
+  // Step 3: Sample Seeds
   const candidates = sampleSeedTuples(profile, recentChallenges, 5);
   
-  // Step 4: Score (Mock uses random for now)
-  const selectedSeed = candidates[0]; // just picking the first one
+  // Step 4: Heuristic scorer. A TabPFN service can replace this behind the
+  // same boundary later; the fallback remains useful for local/offline mode.
+  const scoredCandidates = candidates.map(seed => ({
+    seed,
+    probability: scoreSeed(seed, profile),
+  }));
+  const selectedSeed = scoredCandidates
+    .sort((a, b) => Math.abs(a.probability - 0.65) - Math.abs(b.probability - 0.65))[0]?.seed || candidates[0];
 
   // Step 5: Generate
   const prompt = `You are the Touch Grass challenge writer. Your job is to create ONE unique, specific, 
@@ -160,7 +180,7 @@ RULES:
 
 Respond ONLY with valid JSON matching the provided schema.`;
 
-  const userContext = `Seed: ${JSON.stringify(selectedSeed)}\nUser Location: ${profile.city}`;
+  const userContext = `Seed: ${JSON.stringify(selectedSeed)}\nContext: ${JSON.stringify(context)}`;
 
   let draftChallenge: DraftChallenge;
   let sourceModel = providerMode === 'hosted'
@@ -266,6 +286,8 @@ Respond only with JSON matching the provided schema.`,
     useAudioFallback: audio.useFallback,
     metadata: {
       seedSelected: selectedSeed,
+      scoringMethod: 'heuristic',
+      context,
       safetyChecks: 2,
       dedupAttempts: 1,
       isDuplicate: false,
