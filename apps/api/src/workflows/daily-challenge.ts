@@ -10,6 +10,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as Sentry from '@sentry/node';
+import { getRepositories } from '../db/factory.js';
+import { getModelProvider } from '../providers/factory.js';
 
 const ChallengeSchema = z.object({
   title: z.string().min(5).max(100),
@@ -29,12 +31,6 @@ const ChallengeSchema = z.object({
 });
 
 type DraftChallenge = z.infer<typeof ChallengeSchema>;
-
-// Keep mock-mode state for the lifetime of the API process so Step 1 memory
-// and Step 6 deduplication work across requests in local/CI mode.
-const mockUserRepo = new MockUserRepository();
-const mockChallengeRepo = new MockChallengeRepository();
-const mockEventRepo = new MockEventRepository();
 
 const SafetySchema = z.object({
   safe: z.boolean(),
@@ -137,12 +133,8 @@ async function generateAudio(text: string): Promise<{ audioUrl: string | null; u
 }
 
 async function runDailyChallengeWorkflow(userId: string) {
-  const userRepo = mockUserRepo;
-  const challengeRepo = mockChallengeRepo;
-  const eventRepo = mockEventRepo;
-  
-  const providerMode = process.env.PROVIDER_MODE || 'mock';
-  const provider = providerMode === 'hosted' ? new HostedProvider() : new MockProvider();
+  const { users: userRepo, challenges: challengeRepo, events: eventRepo } = getRepositories();
+  const provider = getModelProvider();
 
   // Step 1: Load Profile + Memory
   const profile = await userRepo.getProfile(userId);
@@ -189,7 +181,8 @@ Respond ONLY with valid JSON matching the provided schema.`;
   const userContext = `Seed: ${JSON.stringify(selectedSeed)}\nContext: ${JSON.stringify(context)}`;
 
   let draftChallenge: DraftChallenge;
-  let sourceModel = providerMode === 'hosted'
+  const providerModeVal = process.env.PROVIDER_MODE || 'mock';
+  let sourceModel = providerModeVal === 'hosted'
     ? (process.env.GEMMA_TEXT_MODEL || 'gemma-text')
     : 'mock';
 
