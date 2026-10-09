@@ -29,6 +29,45 @@ const ChallengeSchema = z.object({
 
 type DraftChallenge = z.infer<typeof ChallengeSchema>;
 
+export interface DedupResult {
+  isDuplicate: boolean;
+  similarChallenge?: Challenge;
+  reason?: 'seed' | 'tags' | 'embedding';
+}
+
+function sameSeed(a: Challenge, b: Challenge): boolean {
+  return a.seed.category === b.seed.category &&
+    a.seed.placeType === b.seed.placeType &&
+    a.seed.constraint === b.seed.constraint;
+}
+
+function tagOverlap(a: Challenge, b: Challenge): number {
+  const left = new Set(a.tags.map(tag => tag.toLowerCase()));
+  const right = new Set(b.tags.map(tag => tag.toLowerCase()));
+  const shared = [...left].filter(tag => right.has(tag)).length;
+  return shared / Math.max(1, Math.min(left.size, right.size));
+}
+
+export async function checkChallengeDuplicate(
+  challenge: Challenge,
+  recentChallenges: Challenge[],
+  challengeRepo: { findSimilar(embedding: number[], threshold: number, userId: string): Promise<Challenge[]> },
+  embedding?: number[]
+): Promise<DedupResult> {
+  const seedMatch = recentChallenges.find(existing => sameSeed(challenge, existing));
+  if (seedMatch) return { isDuplicate: true, similarChallenge: seedMatch, reason: 'seed' };
+
+  const tagMatch = recentChallenges.find(existing => tagOverlap(challenge, existing) > 0.7);
+  if (tagMatch) return { isDuplicate: true, similarChallenge: tagMatch, reason: 'tags' };
+
+  if (embedding?.length) {
+    const similar = await challengeRepo.findSimilar(embedding, 0.85, challenge.userId);
+    if (similar[0]) return { isDuplicate: true, similarChallenge: similar[0], reason: 'embedding' };
+  }
+
+  return { isDuplicate: false };
+}
+
 function loadBackupChallenge(): DraftChallenge {
   const fixturePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../fixtures/responses/challenge-writer.json');
   try {
@@ -124,6 +163,20 @@ Respond ONLY with valid JSON matching the provided schema.`;
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
   };
 
+  // Step 6: Dedup Check
+  let embedding: number[] | undefined;
+  try {
+    const embeddingText = `${challenge.title}\n${challenge.description}\n${challenge.tags.join(', ')}`;
+    embedding = (await provider.embed([embeddingText]))[0];
+  } catch (error) {
+    console.warn('Embedding unavailable; continuing without vector deduplication', error);
+  }
+  const dedup = await checkChallengeDuplicate(challenge, recentChallenges, challengeRepo, embedding);
+  if (dedup.isDuplicate) {
+    throw new Error(`Duplicate challenge detected by ${dedup.reason}`);
+  }
+  challenge.embedding = embedding;
+
   // Step 7: Safety
   const safety = validateChallengeSafety(challenge, {});
   if (!safety.safe) {
@@ -144,6 +197,8 @@ Respond ONLY with valid JSON matching the provided schema.`;
     metadata: {
       seedSelected: selectedSeed,
       safetyChecks: 1,
+      dedupAttempts: 1,
+      isDuplicate: false,
       sourceModel
     }
   };
