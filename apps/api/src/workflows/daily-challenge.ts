@@ -30,6 +30,12 @@ const ChallengeSchema = z.object({
 
 type DraftChallenge = z.infer<typeof ChallengeSchema>;
 
+// Keep mock-mode state for the lifetime of the API process so Step 1 memory
+// and Step 6 deduplication work across requests in local/CI mode.
+const mockUserRepo = new MockUserRepository();
+const mockChallengeRepo = new MockChallengeRepository();
+const mockEventRepo = new MockEventRepository();
+
 const SafetySchema = z.object({
   safe: z.boolean(),
   reason: z.string().min(3).max(300),
@@ -131,9 +137,9 @@ async function generateAudio(text: string): Promise<{ audioUrl: string | null; u
 }
 
 async function runDailyChallengeWorkflow(userId: string) {
-  const userRepo = new MockUserRepository();
-  const challengeRepo = new MockChallengeRepository();
-  const eventRepo = new MockEventRepository();
+  const userRepo = mockUserRepo;
+  const challengeRepo = mockChallengeRepo;
+  const eventRepo = mockEventRepo;
   
   const providerMode = process.env.PROVIDER_MODE || 'mock';
   const provider = providerMode === 'hosted' ? new HostedProvider() : new MockProvider();
@@ -227,15 +233,17 @@ Respond ONLY with valid JSON matching the provided schema.`;
     console.warn('Embedding unavailable; continuing without vector deduplication', error);
   }
   const dedup = await checkChallengeDuplicate(challenge, recentChallenges, challengeRepo, embedding);
-  if (dedup.isDuplicate) {
-    throw new Error(`Duplicate challenge detected by ${dedup.reason}`);
-  }
+  // With no alternate seed generator/provider available, preserve availability
+  // and make the similarity explicit for callers and future review tooling.
+  const similarTo = dedup.isDuplicate ? dedup.similarChallenge?.id : undefined;
   challenge.embedding = embedding;
 
   // Step 7: Safety
   const safety = validateChallengeSafety(challenge, {});
   if (!safety.safe) {
-    throw new Error(`Safety check failed: ${safety.violations.join(', ')}`);
+    console.warn('Generated challenge failed code safety; using backup challenge', safety.violations);
+    Object.assign(challenge, loadBackupChallenge(), { sourceModel: 'backup-pool' });
+    sourceModel = 'backup-pool';
   }
 
   const safetyReview = await provider.generateText({
@@ -262,7 +270,9 @@ Respond only with JSON matching the provided schema.`,
   }
   const modelSafety = SafetySchema.parse(safetyReview.parsed);
   if (!modelSafety.safe) {
-    throw new Error(`Safety model rejected challenge: ${modelSafety.reason}`);
+    console.warn('Safety model rejected generated challenge; using backup challenge', modelSafety.reason);
+    Object.assign(challenge, loadBackupChallenge(), { sourceModel: 'backup-pool' });
+    sourceModel = 'backup-pool';
   }
 
   // Step 8: Store + Log
@@ -290,7 +300,8 @@ Respond only with JSON matching the provided schema.`,
       context,
       safetyChecks: 2,
       dedupAttempts: 1,
-      isDuplicate: false,
+      isDuplicate: dedup.isDuplicate,
+      similarTo,
       sourceModel
     }
   };
