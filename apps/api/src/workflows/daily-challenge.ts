@@ -29,6 +29,11 @@ const ChallengeSchema = z.object({
 
 type DraftChallenge = z.infer<typeof ChallengeSchema>;
 
+const SafetySchema = z.object({
+  safe: z.boolean(),
+  reason: z.string().min(3).max(300),
+});
+
 export interface DedupResult {
   isDuplicate: boolean;
   similarChallenge?: Challenge;
@@ -183,6 +188,33 @@ Respond ONLY with valid JSON matching the provided schema.`;
     throw new Error(`Safety check failed: ${safety.violations.join(', ')}`);
   }
 
+  const safetyReview = await provider.generateText({
+    systemPrompt: `You are the safety reviewer for an outdoor challenge app.
+Review the challenge for realistic physical, legal, privacy, social, and environmental risks.
+Reject challenges involving trespassing, dangerous heights or traffic, substances, spending money,
+medical claims, coercive social interaction, or unsafe instructions. Be practical and conservative.
+Respond only with JSON matching the provided schema.`,
+    userPrompt: `Challenge to review:\n${JSON.stringify({
+      title: challenge.title,
+      description: challenge.description,
+      category: challenge.category,
+      difficulty: challenge.difficulty,
+      socialLevel: challenge.socialLevel,
+      safetyNotes: challenge.safetyNotes,
+    })}`,
+    schema: SafetySchema,
+    maxTokens: 120,
+    temperature: 0
+  });
+
+  if (!safetyReview.parsed) {
+    throw new Error('Safety model returned an invalid response');
+  }
+  const modelSafety = SafetySchema.parse(safetyReview.parsed);
+  if (!modelSafety.safe) {
+    throw new Error(`Safety model rejected challenge: ${modelSafety.reason}`);
+  }
+
   // Step 8: Store + Log
   await challengeRepo.save(challenge);
   await eventRepo.log({
@@ -196,7 +228,7 @@ Respond ONLY with valid JSON matching the provided schema.`;
     challenge,
     metadata: {
       seedSelected: selectedSeed,
-      safetyChecks: 1,
+      safetyChecks: 2,
       dedupAttempts: 1,
       isDuplicate: false,
       sourceModel
