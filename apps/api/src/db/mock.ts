@@ -28,11 +28,11 @@ export class MockChallengeRepository implements ChallengeRepository {
     ) || null;
   }
 
-  async getRecent(userId: string, days: number): Promise<Challenge[]> {
+  async getRecent(userId: string, _days: number): Promise<Challenge[]> {
     return this.challenges.filter(c => c.userId === userId);
   }
 
-  async findSimilar(embedding: number[], threshold: number, userId: string): Promise<Challenge[]> {
+  async findSimilar(_embedding: number[], _threshold: number, _userId: string): Promise<Challenge[]> {
     return []; // Mock: no duplicates found
   }
 }
@@ -48,7 +48,7 @@ export class MockEventRepository implements EventRepository {
     return this.events.filter(e => e.userId === userId).slice(0, limit);
   }
 
-  async getAggregates(userId: string, period: string): Promise<Aggregates> {
+  async getAggregates(_userId: string, _period: string): Promise<Aggregates> {
     return {
       weeklyCompletion: {},
       categoryCompletion: {},

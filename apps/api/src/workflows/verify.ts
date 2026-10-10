@@ -102,32 +102,54 @@ export async function runVerifyProof(
     const attempts = previousAttempts + 1;
     const maxAttempts = 2;
 
-    let pass = false;
-    let confidence = 0;
-    let reason = '';
-    let needsRetake = false;
+    if (input.proofType === 'photo' && !input.imageBase64) {
+      return {
+        pass: false,
+        confidence: 0,
+        reason: 'Photo proof requires image data.',
+        needsRetake: true,
+        honorSystem: false,
+        attempts,
+        challengeId: input.challengeId,
+        status: 'failed',
+      };
+    }
+    if (input.proofType === 'strava_screenshot' && !input.imageBase64) {
+      return {
+        pass: false, confidence: 0,
+        reason: 'Strava screenshot proof requires image data.',
+        needsRetake: true,
+        honorSystem: false, attempts,
+        challengeId: input.challengeId,
+        status: 'failed',
+      };
+    }
+
+    let pass: boolean;
+    let confidence: number;
+    let reason: string;
+    let needsRetake: boolean;
     let honorSystem = false;
     let extractedData: VerifyOutput['extractedData'] = undefined;
 
+    if (input.proofType === 'honor' && !input.honorConfirm) {
+      return {
+        pass: false, confidence: 0,
+        reason: 'Honor system requires confirmation.',
+        needsRetake: true,
+        honorSystem: true, attempts,
+        challengeId: input.challengeId,
+        status: 'failed',
+      };
+    }
+
     switch (input.proofType) {
       case 'photo': {
-        if (!input.imageBase64) {
-          return {
-            pass: false,
-            confidence: 0,
-            reason: 'Photo proof requires image data.',
-            needsRetake: true,
-            honorSystem: false,
-            attempts,
-            challengeId: input.challengeId,
-            status: 'failed',
-          };
-        }
         try {
           const res = await provider.analyzeImage({
             systemPrompt: VERIFY_SYSTEM_PROMPT,
             userPrompt: `Rubric: ${challenge.proofRubric}\n\nPlease verify the attached image against this rubric.`,
-            imageBase64: input.imageBase64,
+            imageBase64: input.imageBase64!,
             schema: VerificationSchema,
             maxTokens: 200,
           });
@@ -160,21 +182,11 @@ export async function runVerifyProof(
       }
 
       case 'strava_screenshot': {
-        if (!input.imageBase64) {
-          return {
-            pass: false, confidence: 0,
-            reason: 'Strava screenshot proof requires image data.',
-            needsRetake: true,
-            honorSystem: false, attempts,
-            challengeId: input.challengeId,
-            status: 'failed',
-          };
-        }
         try {
           const res = await provider.analyzeImage({
             systemPrompt: STRAVA_SYSTEM_PROMPT,
             userPrompt: 'Extract activity fields from this Strava screenshot.',
-            imageBase64: input.imageBase64,
+            imageBase64: input.imageBase64!,
             schema: StravaExtractSchema,
             maxTokens: 150,
           });
@@ -234,16 +246,6 @@ export async function runVerifyProof(
       case 'honor':
       default: {
         honorSystem = true;
-        if (!input.honorConfirm) {
-          return {
-            pass: false, confidence: 0,
-            reason: 'Honor system requires confirmation.',
-            needsRetake: true,
-            honorSystem: true, attempts,
-            challengeId: input.challengeId,
-            status: 'failed',
-          };
-        }
         pass = true;
         confidence = 1.0;
         reason = 'User confirmed completion via honor system.';

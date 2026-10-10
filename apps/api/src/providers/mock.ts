@@ -20,6 +20,7 @@ export class MockProvider implements ModelProvider {
         const fileContent = fs.readFileSync(filePath, 'utf-8');
         data = JSON.parse(fileContent);
       } catch (e) {
+        void e;
         // Fallback if running from a different cwd or file missing
         data = {
           title: "Mock Challenge",
@@ -59,7 +60,7 @@ export class MockProvider implements ModelProvider {
     };
   }
 
-  async analyzeImage(opts: {
+  async analyzeImage(_opts: {
     systemPrompt: string;
     userPrompt: string;
     imageBase64: string;

@@ -25,7 +25,7 @@ export interface WeeklyReportOutput {
   highlights: string[];
 }
 
-function computeStats(challenges: Challenge[], events: AppEvent[]) {
+function computeStats(challenges: Challenge[], _events: AppEvent[]) {
   const issued = challenges.length;
   const completed = challenges.filter(c => c.status === 'completed').length;
   const skipped = challenges.filter(c => c.status === 'skipped').length;
@@ -33,9 +33,6 @@ function computeStats(challenges: Challenge[], events: AppEvent[]) {
   const completionRate = issued === 0 ? 0 : completed / Math.max(1, issued);
 
   const completedList = challenges.filter(c => c.status === 'completed');
-  const sortedByDate = [...challenges]
-    .filter(c => c.status === 'completed' || c.status === 'issued')
-    .sort((a, b) => a.issuedAt.getTime() - b.issuedAt.getTime());
 
   let streak = 0;
   const today = new Date();

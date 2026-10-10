@@ -24,7 +24,7 @@ export interface ReflectionOutput {
   tags: string[];
 }
 
-async function transcribeVoice(voiceBase64: string, provider: ModelProvider): Promise<string | null> {
+async function transcribeVoice(voiceBase64: string, _provider: ModelProvider): Promise<string | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return null;
   try {

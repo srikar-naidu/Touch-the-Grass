@@ -8,7 +8,7 @@ export interface SafetyResult {
 
 export function validateChallengeSafety(
   challenge: Challenge,
-  context: { sunsetTime?: string; timeOfDay?: string }
+  _context: { sunsetTime?: string; timeOfDay?: string }
 ): SafetyResult {
   const violations: string[] = [];
   let autoFixed = false;

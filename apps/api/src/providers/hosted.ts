@@ -39,6 +39,7 @@ export class HostedProvider implements ModelProvider {
       // Google's responseSchema accepts the JSON Schema vocabulary but not the
       // draft metadata emitted by zod-to-json-schema.
       const { $schema: _draft, ...responseSchema } = jsonSchema;
+      void _draft;
       payload.generationConfig.responseSchema = responseSchema;
     }
 

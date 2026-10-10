@@ -1,6 +1,3 @@
-import { MockUserRepository, MockChallengeRepository, MockEventRepository } from '../db/mock.js';
-import { MockProvider } from '../providers/mock.js';
-import { HostedProvider } from '../providers/hosted.js';
 import { sampleSeedTuples } from '../taxonomy/sampler.js';
 import { validateChallengeSafety } from '../safety/validator.js';
 import { ulid } from 'ulid';

@@ -292,14 +292,8 @@ app.put('/api/users/:userId/profile', async (c) => {
   }
 });
 
-const DeleteDataBody = z.object({
-  confirm: z.boolean().optional(),
-});
-
 app.delete('/api/users/:userId/data', async (c) => {
   const userId = requireUserId(c);
-  const parsed = await requireBody(c, DeleteDataBody.partial());
-  const body = parsed.ok ? parsed.value : {};
   try {
     const challenges = await repos.challenges.getRecent(userId, 3650);
     const eventHistory = await repos.events.getUserHistory(userId, 100000);
@@ -393,7 +387,6 @@ app.get('/api/users/:userId/aggregates', async (c) => {
   try {
     const daysMap: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, all: 3650 };
     const challenges = await repos.challenges.getRecent(userId, daysMap[period] || 30);
-    const events = await repos.events.getUserHistory(userId, 10000);
     const agg = await repos.events.getAggregates(userId, period);
 
     const issued = challenges.length;

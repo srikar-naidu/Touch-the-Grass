@@ -1,10 +1,9 @@
-import { Category, PlaceType, Constraint, ProofType, SeedTuple } from './types.js';
+import { Category, PlaceType, Constraint, SeedTuple } from './types.js';
 import { UserProfile, Challenge } from '../db/interface.js';
 
 const CATEGORIES: Category[] = ['nature', 'movement', 'sport', 'social-light', 'social-bold', 'creative', 'mindful', 'sensory', 'style', 'community', 'exploration'];
 const PLACE_TYPES: PlaceType[] = ['park', 'court', 'street', 'market', 'rooftop', 'trail', 'water-edge', 'neighborhood', 'campus', 'any'];
 const CONSTRAINTS: Constraint[] = ['no-phone', 'with-a-friend', 'barefoot-if-safe', 'collect-items', 'timed', 'silent', 'golden-hour', 'eyes-closed', 'one-handed', 'backwards', 'none'];
-const PROOF_TYPES: ProofType[] = ['photo', 'strava_screenshot', 'voice_note', 'honor'];
 
 function randomElement<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
